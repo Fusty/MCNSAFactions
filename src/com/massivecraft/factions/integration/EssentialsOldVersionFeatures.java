@@ -21,8 +21,8 @@ public class EssentialsOldVersionFeatures
 	public static void integrateChat(EssentialsChat instance)
 	{
 		essChat = instance;
-		try
-		{
+		/*try{
+		
 			essChat.addEssentialsChatListener("Factions", new IEssentialsChatListener()
 			{
 				public boolean shouldHandleThisChat(PlayerChatEvent event)
@@ -46,14 +46,14 @@ public class EssentialsOldVersionFeatures
 		catch (NoSuchMethodError ex)
 		{
 			essChat = null;
-		}
+		}*/
 	}
 
 	public static void unhookChat()
 	{
 		if (essChat != null)
 		{
-			essChat.removeEssentialsChatListener("Factions");
+			//essChat.removeEssentialsChatListener("Factions");
 		}
 	}
 }

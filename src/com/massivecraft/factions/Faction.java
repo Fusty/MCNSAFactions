@@ -332,7 +332,7 @@ public class Faction extends Entity implements EconomyParticipator
 	
 	public boolean hasLandInflation()
 	{
-		return this.getLandRounded() > this.getPowerRounded();
+		return this.getLandRounded()*10 > this.getPowerRounded();
 	}
 	
 	// -------------------------------

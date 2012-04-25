@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -23,7 +24,7 @@ import com.massivecraft.factions.zcore.util.DiscUtil;
 public class Board
 {
 	private static transient File file = new File(P.p.getDataFolder(), "board.json");
-	private static transient HashMap<FLocation, String> flocationIds = new HashMap<FLocation, String>();
+	private static transient HashMap<FLocation, String[]> flocationIds = new HashMap<FLocation, String[]>();
 	
 	//----------------------------------------------//
 	// Get and Set
@@ -35,7 +36,21 @@ public class Board
 			return "0";
 		}
 		
-		return flocationIds.get(flocation);
+		return flocationIds.get(flocation)[0];
+	}
+	
+	public static int getClaimIdAt(FLocation flocation){
+		if ( ! flocationIds.containsKey(flocation))
+		{
+			return -1;
+		}
+		
+		try{
+			return Integer.parseInt(flocationIds.get(flocation)[1]);
+		}catch (Exception e){
+			return -1;
+		}
+		
 	}
 	
 	public static Faction getFactionAt(FLocation flocation)
@@ -51,19 +66,23 @@ public class Board
 		return getFactionAt(new FLocation(block));
 	}
 	
-	public static void setIdAt(String id, FLocation flocation)
+	public static void setIdAt(String[] idClaimOrder, FLocation flocation)
 	{
+		String id = idClaimOrder[0];
+		String claimOrder = idClaimOrder[1];
 		if (id == "0")
 		{
 			removeAt(flocation);
 		}
-		
-		flocationIds.put(flocation, id);
+		//TODO  FIX THIS FUCKING SHIT SO IT SAVES AN INCREMENTAL ORDER ID
+		flocationIds.put(flocation, new String[]{id,claimOrder});
 	}
 	
 	public static void setFactionAt(Faction faction, FLocation flocation)
 	{
-		setIdAt(faction.getId(), flocation);
+		fixClaimOrderIds();
+		int nextClaimId = Board.getFactionCoordCount(faction)+1;
+		setIdAt(new String[]{faction.getId(), nextClaimId+""}, flocation);
 	}
 	
 	public static void removeAt(FLocation flocation)
@@ -72,15 +91,16 @@ public class Board
 			LWCFeatures.clearAllChests(flocation);
 
 		flocationIds.remove(flocation);
+		fixClaimOrderIds();
 	}
 	
 	public static void unclaimAll(String factionId)
 	{
-		Iterator<Entry<FLocation, String>> iter = flocationIds.entrySet().iterator();
+		Iterator<Entry<FLocation, String[]>> iter = flocationIds.entrySet().iterator();
 		while (iter.hasNext())
 		{
-			Entry<FLocation, String> entry = iter.next();
-			if (entry.getValue().equals(factionId))
+			Entry<FLocation, String[]> entry = iter.next();
+			if (entry.getValue()[0].equals(factionId))
 			{
 					if(Conf.onUnclaimResetLwcLocks && LWCFeatures.getEnabled())
 						LWCFeatures.clearAllChests(entry.getKey());
@@ -88,6 +108,7 @@ public class Board
 					iter.remove();
 			}
 		}
+		fixClaimOrderIds();
 	}
 
 	// Is this coord NOT completely surrounded by coords claimed by the same faction?
@@ -112,6 +133,38 @@ public class Board
 		return faction == getFactionAt(a) || faction == getFactionAt(b) || faction == getFactionAt(c) || faction == getFactionAt(d);
 	}
 	
+	//----------------------------------------------//
+	// ID Cleaner. Reorder and renumber claimOrderId's
+	//----------------------------------------------//
+	
+	public static void fixClaimOrderIds(){
+		for (Faction faction : Factions.i.get())
+		{
+			String factionId = faction.getId();
+			int coordCount = getFactionCoordCount(factionId);
+			Iterator<Entry<FLocation, String[]>> iter = flocationIds.entrySet().iterator();
+			TreeMap<String, FLocation> sortMap = new TreeMap<String, FLocation>();
+			//Gather the current claims in their current natural order
+			while (iter.hasNext()) {
+				Entry<FLocation, String[]> entry = iter.next();
+				if (entry.getValue()[0].equalsIgnoreCase(factionId))
+				{
+					sortMap.put(entry.getValue()[1], entry.getKey());
+				}
+			}
+			//Renumber them starting at 1 in their natural order
+			int newOrder = 1;
+			Iterator<Entry<String, FLocation>> anotherIter = sortMap.entrySet().iterator();
+			while(anotherIter.hasNext()){
+				Entry<String, FLocation> anotherEntry = anotherIter.next();
+				FLocation locationToUpdate = anotherEntry.getValue();
+				String[] idClaim = new String[]{factionId,""+newOrder};
+				setIdAt(idClaim, locationToUpdate);
+				newOrder++;
+			}
+		}
+		P.p.log("Board Claim Order Id's cleaned");
+	}
 	
 	//----------------------------------------------//
 	// Cleaner. Remove orphaned foreign keys
@@ -119,10 +172,10 @@ public class Board
 	
 	public static void clean()
 	{
-		Iterator<Entry<FLocation, String>> iter = flocationIds.entrySet().iterator();
+		Iterator<Entry<FLocation, String[]>> iter = flocationIds.entrySet().iterator();
 		while (iter.hasNext()) {
-			Entry<FLocation, String> entry = iter.next();
-			if ( ! Factions.i.exists(entry.getValue()))
+			Entry<FLocation, String[]> entry = iter.next();
+			if ( ! Factions.i.exists(entry.getValue()[0]))
 			{
 				if(Conf.onUnclaimResetLwcLocks && LWCFeatures.getEnabled())
 					LWCFeatures.clearAllChests(entry.getKey());
@@ -133,6 +186,8 @@ public class Board
 		}
 	}	
 	
+	
+	
 	//----------------------------------------------//
 	// Coord count
 	//----------------------------------------------//
@@ -140,9 +195,9 @@ public class Board
 	public static int getFactionCoordCount(String factionId)
 	{
 		int ret = 0;
-		for (String thatFactionId : flocationIds.values())
+		for (String[] thatFactionId : flocationIds.values())
 		{
-			if(thatFactionId.equals(factionId))
+			if(thatFactionId[0].equals(factionId))
 			{
 				ret += 1;
 			}
@@ -159,10 +214,10 @@ public class Board
 	{
 		String factionId = faction.getId();
 		int ret = 0;
-		Iterator<Entry<FLocation, String>> iter = flocationIds.entrySet().iterator();
+		Iterator<Entry<FLocation, String[]>> iter = flocationIds.entrySet().iterator();
 		while (iter.hasNext()) {
-			Entry<FLocation, String> entry = iter.next();
-			if (entry.getValue().equals(factionId) && entry.getKey().getWorldName().equals(worldName))
+			Entry<FLocation, String[]> entry = iter.next();
+			if (entry.getValue()[0].equals(factionId) && entry.getKey().getWorldName().equals(worldName))
 			{
 				ret += 1;
 			}
@@ -258,18 +313,20 @@ public class Board
 		
 		String worldName, coords;
 		String id;
+		String claimId;
 		
-		for (Entry<FLocation, String> entry : flocationIds.entrySet())
+		for (Entry<FLocation, String[]> entry : flocationIds.entrySet())
 		{
 			worldName = entry.getKey().getWorldName();
 			coords = entry.getKey().getCoordString();
-			id = entry.getValue();
+			id = entry.getValue()[0];
+			claimId = entry.getValue()[1];
 			if ( ! worldCoordIds.containsKey(worldName))
 			{
 				worldCoordIds.put(worldName, new TreeMap<String,String>());
 			}
 			
-			worldCoordIds.get(worldName).put(coords, id);
+			worldCoordIds.get(worldName).put(coords, id+","+claimId);
 		}
 		
 		return worldCoordIds;
@@ -283,6 +340,7 @@ public class Board
 		String[] coords;
 		int x, z;
 		String factionId;
+		String claimOrderId;
 		
 		for (Entry<String,Map<String,String>> entry : worldCoordIds.entrySet())
 		{
@@ -292,8 +350,10 @@ public class Board
 				coords = entry2.getKey().trim().split("[,\\s]+");
 				x = Integer.parseInt(coords[0]);
 				z = Integer.parseInt(coords[1]);
-				factionId = entry2.getValue();
-				flocationIds.put(new FLocation(worldName, x, z), factionId);
+				String[] entryStr = entry2.getValue().split("[,\\s]+");
+				factionId = entryStr[0];
+				claimOrderId = entryStr[1];
+				flocationIds.put(new FLocation(worldName, x, z), entryStr);
 			}
 		}
 	}
@@ -301,6 +361,7 @@ public class Board
 	public static boolean save()
 	{
 		//Factions.log("Saving board to disk");
+		fixClaimOrderIds();
 		
 		try
 		{

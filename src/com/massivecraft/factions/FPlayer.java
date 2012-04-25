@@ -557,6 +557,16 @@ public class FPlayer extends PlayerEntity implements EconomyParticipator
 		Faction myFaction = getFaction();
 		Faction currentFaction = Board.getFactionAt(flocation);
 		int ownedLand = forFaction.getLandRounded();
+		P.p.log("GetClaimId = "+Board.getClaimIdAt(flocation)+" currentFaction = "+currentFaction.getFPlayers().size());
+		
+		if(Board.getClaimIdAt(flocation) <= currentFaction.getFPlayers().size()){
+			if(Board.getClaimIdAt(flocation) == -1){
+			}
+			else{
+				P.p.log("claim id was less or equal to currentFaction player count");
+				error = P.p.txt.parse("<b>You cannot claim a factions core! (factions can have as many core claims as they have players)");
+			}
+		}
 		
 		if (Conf.worldGuardChecking && Worldguard.checkForRegionsInChunk(location))
 		{
@@ -583,7 +593,7 @@ public class FPlayer extends PlayerEntity implements EconomyParticipator
 		{
 			error = P.p.txt.parse("Factions must have at least <h>%s<b> members to claim land.", Conf.claimsRequireMinFactionMembers);
 		}
-		else if (ownedLand >= forFaction.getPowerRounded())
+		else if (ownedLand*10 >= forFaction.getPowerRounded())
 		{
 			error = P.p.txt.parse("<b>You can't claim more land! You need more power!");
 		}
@@ -621,6 +631,8 @@ public class FPlayer extends PlayerEntity implements EconomyParticipator
 				error = P.p.txt.parse("<b>You must start claiming land at the border of the territory.");
 			}
 		}
+
+		
 		
 		if (notifyFailure && error != null)
 		{
